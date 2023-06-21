@@ -14,14 +14,14 @@ const (
 	stateHandOver
 )
 
-func New() GameState {
-	return GameState{
+func New() Game {
+	return Game{
 		state:   statePlayerTurn,
 		balance: 0,
 	}
 }
 
-type GameState struct {
+type Game struct {
 	// unexported fields
 	deck    []deck.Card
 	state   state
@@ -30,104 +30,104 @@ type GameState struct {
 	balance int
 }
 
-func (gs *GameState) currentHand() *[]deck.Card {
-	switch gs.state {
+func (g *Game) currentHand() *[]deck.Card {
+	switch g.state {
 	case statePlayerTurn:
-		return &gs.player
+		return &g.player
 	case stateDealerTurn:
-		return &gs.dealer
+		return &g.dealer
 	default:
 		panic("It isn't currently any player's turn")
 	}
 }
 
-func deal(gs *GameState) {
-	gs.player = make([]deck.Card, 0, 5)
-	gs.dealer = make([]deck.Card, 0, 5)
+func deal(g *Game) {
+	g.player = make([]deck.Card, 0, 5)
+	g.dealer = make([]deck.Card, 0, 5)
 	var card deck.Card
 	for i := 0; i < 2; i++ {
-		card, gs.deck = draw(gs.deck)
-		gs.player = append(gs.player, card)
-		card, gs.deck = draw(gs.deck)
-		gs.dealer = append(gs.dealer, card)
+		card, g.deck = draw(g.deck)
+		g.player = append(g.player, card)
+		card, g.deck = draw(g.deck)
+		g.dealer = append(g.dealer, card)
 	}
-	gs.state = statePlayerTurn
+	g.state = statePlayerTurn
 }
 
-func (gs *GameState) Play(ai AI) int {
-	gs.deck = deck.New(deck.Deck(3), deck.Shuffle)
+func (g *Game) Play(ai AI) int {
+	g.deck = deck.New(deck.Deck(3), deck.Shuffle)
 
 	for i := 0; i < 10; i++ {
-		deal(gs)
+		deal(g)
 
-		for gs.state == statePlayerTurn {
-			hand := make([]deck.Card, len(gs.player))
-			copy(hand, gs.player)
-			move := ai.Play(hand, gs.dealer[0])
-			move(gs)
+		for g.state == statePlayerTurn {
+			hand := make([]deck.Card, len(g.player))
+			copy(hand, g.player)
+			move := ai.Play(hand, g.dealer[0])
+			move(g)
 		}
 
-		// Dealer Tunr == gs.State = StateDealerTurn
-		for gs.state == stateDealerTurn {
-			dScore := Score(gs.dealer...)
-			if dScore <= 16 || (dScore == 17 && Soft(gs.dealer...)) {
-				MoveHit(gs)
+		// Dealer Tunr == g.State = StateDealerTurn
+		for g.state == stateDealerTurn {
+			dScore := Score(g.dealer...)
+			if dScore <= 16 || (dScore == 17 && Soft(g.dealer...)) {
+				MoveHit(g)
 			} else {
-				MoveStand(gs)
+				MoveStand(g)
 			}
 		}
 
 		// Score calculation
-		endHand(gs, ai)
+		endHand(g, ai)
 	}
-	return 0
+	return g.balance
 }
 
-type Move func(*GameState)
+type Move func(*Game)
 
-func MoveHit(gs *GameState) {
-	hand := gs.currentHand()
+func MoveHit(g *Game) {
+	hand := g.currentHand()
 	var card deck.Card
-	card, gs.deck = draw(gs.deck)
+	card, g.deck = draw(g.deck)
 	*hand = append(*hand, card)
 	if Score(*hand...) > 21 {
-		MoveStand(gs)
+		MoveStand(g)
 	}
 }
 
-func MoveStand(gs *GameState) {
-	gs.state++
+func MoveStand(g *Game) {
+	g.state++
 }
 
 func draw(cards []deck.Card) (deck.Card, []deck.Card) {
 	return cards[0], cards[1:]
 }
 
-func endHand(gs *GameState, ai AI) {
-	pScore, dScore := Score(gs.player...), Score(gs.dealer...)
+func endHand(g *Game, ai AI) {
+	pScore, dScore := Score(g.player...), Score(g.dealer...)
 	// TODO:  Figure out winnings and add/subtract them
 	switch {
 	case pScore > 21:
 		fmt.Println("You busted")
-		gs.balance--
+		g.balance--
 	case dScore > 21:
 		fmt.Println("Dealer busted")
-		gs.balance++
+		g.balance++
 	case pScore > dScore:
 		fmt.Println("You win!")
-		gs.balance++
+		g.balance++
 	case dScore > pScore:
 		fmt.Println("You lose")
-		gs.balance--
+		g.balance--
 	case pScore == dScore:
 		fmt.Println("Draw")
 	}
 	// Marcar una nueva linea
 	fmt.Println()
-	ai.Results([][]deck.Card{gs.player}, gs.dealer)
+	ai.Results([][]deck.Card{g.player}, g.dealer)
 	// Reset hands
-	gs.player = nil
-	gs.dealer = nil
+	g.player = nil
+	g.dealer = nil
 }
 
 // Score will take in a hand of cards and return the best blackjack score
