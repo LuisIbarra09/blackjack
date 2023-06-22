@@ -1,8 +1,6 @@
 package blackjack
 
 import (
-	"fmt"
-
 	"github.com/LuisIbarra09/deck"
 )
 
@@ -102,6 +100,11 @@ func (g *Game) Play(ai AI) int {
 		bet(g, ai, shuffled)
 		// Reparte cartas
 		deal(g)
+		// Checamos si la mano del dealer es blackjack
+		if Blackjack(g.dealer...) {
+			endHand(g, ai)
+			continue
+		}
 
 		for g.state == statePlayerTurn {
 			hand := make([]deck.Card, len(g.player))
@@ -148,26 +151,28 @@ func draw(cards []deck.Card) (deck.Card, []deck.Card) {
 
 func endHand(g *Game, ai AI) {
 	pScore, dScore := Score(g.player...), Score(g.dealer...)
+	pBlackjack, dBlackjack := Blackjack(g.player...), Blackjack(g.dealer...)
 	// TODO:  Figure out winnings and add/subtract them
 	winnings := g.playerBet
 	switch {
+	case pBlackjack && dBlackjack:
+		winnings = 0
+	case dBlackjack:
+		winnings = -winnings
+	case pBlackjack:
+		winnings = int(float64(winnings) * g.blackjackPayout)
 	case pScore > 21:
-		fmt.Println("You busted")
 		winnings = -winnings
 	case dScore > 21:
-		fmt.Println("Dealer busted")
+		// win
 	case pScore > dScore:
-		fmt.Println("You win!")
+		// win
 	case dScore > pScore:
-		fmt.Println("You lose")
 		winnings = -winnings
 	case pScore == dScore:
-		fmt.Println("Draw")
 		winnings = 0
 	}
 	g.balance += winnings
-	// Marcar una nueva linea
-	fmt.Println()
 	ai.Results([][]deck.Card{g.player}, g.dealer)
 	// Reset hands
 	g.player = nil
@@ -188,6 +193,11 @@ func Score(hand ...deck.Card) int {
 		}
 	}
 	return minScore
+}
+
+// Blackjack returns true if a hand is a blackjack
+func Blackjack(hand ...deck.Card) bool {
+	return len(hand) == 2 && Score(hand...) == 21
 }
 
 // Soft returns true if the score of a hand is a soft score - that is if an ace
