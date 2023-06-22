@@ -14,20 +14,46 @@ const (
 	stateHandOver
 )
 
-func New() Game {
-	return Game{
+type Options struct {
+	Decks           int
+	Hands           int
+	BlackjackPayout float64
+}
+
+func New(opts Options) Game {
+	g := Game{
 		state:   statePlayerTurn,
 		balance: 0,
 	}
+	if opts.Decks == 0 {
+		opts.Decks = 3
+	}
+	if opts.Hands == 0 {
+		opts.Hands = 100
+	}
+	if opts.BlackjackPayout == 0.0 {
+		opts.BlackjackPayout = 1.5
+	}
+	g.nDecks = opts.Decks
+	g.nHands = opts.Hands
+	g.blackjackPayout = opts.BlackjackPayout
+	return g
 }
 
 type Game struct {
 	// unexported fields
-	deck    []deck.Card
-	state   state
-	player  []deck.Card
-	dealer  []deck.Card
-	balance int
+	nDecks          int
+	nHands          int
+	blackjackPayout float64
+
+	state state
+	deck  []deck.Card
+
+	player    []deck.Card
+	playerBet int
+	balance   int
+
+	dealer []deck.Card
 }
 
 func (g *Game) currentHand() *[]deck.Card {
@@ -39,6 +65,11 @@ func (g *Game) currentHand() *[]deck.Card {
 	default:
 		panic("It isn't currently any player's turn")
 	}
+}
+
+func bet(g *Game, ai AI, shuffled bool) {
+	bet := ai.Bet(shuffled)
+	g.playerBet = bet
 }
 
 func deal(g *Game) {
@@ -55,9 +86,21 @@ func deal(g *Game) {
 }
 
 func (g *Game) Play(ai AI) int {
-	g.deck = deck.New(deck.Deck(3), deck.Shuffle)
+	// empieza el deck como nil para que entre en la #1 iteracion al if
+	g.deck = deck.New(deck.Deck(g.nDecks), deck.Shuffle)
+	// min de cartas que debe tener el deck
+	min := 52 * g.nDecks / 3
 
-	for i := 0; i < 10; i++ {
+	for i := 0; i < g.nHands; i++ {
+		shuffled := false
+		// Genera el deck y sirve para generar uno nuevo cuando llege al min
+		if len(g.deck) < min {
+			g.deck = deck.New(deck.Deck(g.nDecks), deck.Shuffle)
+			shuffled = true
+		}
+		// Pedir apuestas
+		bet(g, ai, shuffled)
+		// Reparte cartas
 		deal(g)
 
 		for g.state == statePlayerTurn {
@@ -106,22 +149,23 @@ func draw(cards []deck.Card) (deck.Card, []deck.Card) {
 func endHand(g *Game, ai AI) {
 	pScore, dScore := Score(g.player...), Score(g.dealer...)
 	// TODO:  Figure out winnings and add/subtract them
+	winnings := g.playerBet
 	switch {
 	case pScore > 21:
 		fmt.Println("You busted")
-		g.balance--
+		winnings = -winnings
 	case dScore > 21:
 		fmt.Println("Dealer busted")
-		g.balance++
 	case pScore > dScore:
 		fmt.Println("You win!")
-		g.balance++
 	case dScore > pScore:
 		fmt.Println("You lose")
-		g.balance--
+		winnings = -winnings
 	case pScore == dScore:
 		fmt.Println("Draw")
+		winnings = 0
 	}
+	g.balance += winnings
 	// Marcar una nueva linea
 	fmt.Println()
 	ai.Results([][]deck.Card{g.player}, g.dealer)
